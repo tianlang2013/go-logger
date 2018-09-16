@@ -31,3 +31,6 @@ func TestLogger(t *testing.T){
 }
 
 ```
+
+as you see that didn`t print debug and trace if you didn`t set the level as trace 
+of cause that didn`t print trace if you set level as debug
