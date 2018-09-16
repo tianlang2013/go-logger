@@ -6,6 +6,7 @@ log for golang  on logger,support level and persional
 修改日志在没有另外实例化的情况下，是影响设置后的代码显示，建议只在项目开始处进行配置
 
 自带行号和日志发生时的文件
+
 #Default
 the info is default info if you didn`t set .
 you could set the level as :
