@@ -4,6 +4,8 @@ log for golang  on logger,support level and persional
 支持级别控制
 默认基本为INFO，高级别自动显示低级别的日志，但是低级别的日志是不显示高级别的日志
 修改日志在没有另外实例化的情况下，是影响设置后的代码显示，建议只在项目开始处进行配置
+
+自带行号和日志发生时的文件
 #Default
 the info is default info if you didn`t set .
 you could set the level as :
