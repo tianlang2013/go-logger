@@ -31,19 +31,33 @@ func TestLogger(t *testing.T){
 	Error( "test" ,"why" , data{11})
 	Warn( "warn" ,"why" , data{11})
 	Info( "info" ,"why" , data{11})
-	SetLevel(LvlTrace)    //set logger Level
+	SetLevel(LvlDebug)
 	Debug( "debug" ,"why" , data{11})
 	Trace( "trace" ,"why" , data{11})
+
+	log := New( os.Stderr , Lshortfile |  LstdFlags  , "test	")
+
+	log.Error( "test" ,"why" , data{11})
+	log.Warn( "warn" ,"why" , data{11})
+	log.Info( "info" ,"why" , data{11})
+	log.Debug( "debug" ,"why" , data{11})
+	log.Trace( "trace" ,"why" , data{11})
+	log.Debug( "debug" ,"why" , data{11})
+	log.Trace( "trace" ,"why" , data{11})
 }
 
 ```
 
 ```
-error	2018/09/15 23:10:22 logger_test.go:8: test [why {11}]
-warn	2018/09/15 23:10:22 logger_test.go:9: warn [why {11}]
-info	2018/09/15 23:10:22 logger_test.go:10: info [why {11}]
-debug	2018/09/15 23:10:22 logger_test.go:12: debug [why {11}]
-trace	2018/09/15 23:10:22 logger_test.go:13: trace [why {11}]
+base	error	2018/09/17 15:28:25 logger_test.go:11: test [why {11}]
+base	warn	2018/09/17 15:28:25 logger_test.go:12: warn [why {11}]
+base	info	2018/09/17 15:28:25 logger_test.go:13: info [why {11}]
+base	debug	2018/09/17 15:28:25 logger_test.go:15: debug [why {11}]
+test	error	2018/09/17 15:28:25 logger_test.go:20: test [why {11}]
+test	warn	2018/09/17 15:28:25 logger_test.go:21: warn [why {11}]
+test	info	2018/09/17 15:28:25 logger_test.go:22: info [why {11}]
+test	debug	2018/09/17 15:28:25 logger_test.go:23: debug [why {11}]
+test	debug	2018/09/17 15:28:25 logger_test.go:25: debug [why {11}]
 ```
 as you see that didn`t print debug and trace if you didn`t set the level as trace 
 of cause that didn`t print trace if you set level as debug
