@@ -1,4 +1,5 @@
 package log
+package logger
 
 import (
 	"fmt"
@@ -55,14 +56,15 @@ var LLevel int32	= LvlInfo
 
 type logger struct {
 	mu     sync.Mutex // ensures atomic writes; protects the following fields
+	model  string		// defause is base
 	prefix string     // prefix to write at beginning of each line
 	flag   int        // properties
 	out    io.Writer  // destination for output
 	buf    []byte     // for accumulating text to write
 }
 
-func New(out io.Writer, prefix string, flag int) *logger {
-	return &logger{out: out, prefix: prefix , flag: flag}
+func New(out io.Writer,   flag int , model string ) *logger {
+	return &logger{out: out,  flag: flag , model : model }
 }
 
 
@@ -72,7 +74,7 @@ func (l *logger) SetOutput(w io.Writer) {
 	l.out = w
 }
 
-var std = New(os.Stderr, "", LstdFlags | log.Lshortfile)
+var std = New(os.Stderr,   LstdFlags | log.Lshortfile,   "base	")
 
 
 func itoa(buf *[]byte, i int, wid int) {
@@ -93,6 +95,8 @@ func itoa(buf *[]byte, i int, wid int) {
 
 
 func (l *logger) formatHeader(buf *[]byte, t time.Time, file string, line int) {
+
+	*buf = append(*buf, l.model...)
 	*buf = append(*buf, l.prefix...)
 	if l.flag&(Ldate|Ltime|Lmicroseconds) != 0 {
 		if l.flag&LUTC != 0 {
@@ -173,7 +177,7 @@ func (l *logger) Trace(msg string, ctx ...interface{}) {
 	if atomic.LoadInt32(&LLevel) < LvlTrace{
 		return
 	}
-	l.SetPrefix("trace")
+	l.SetPrefix("trace	")
 	l.Output(2, fmt.Sprintln(msg,ctx) )
 }
 
@@ -181,7 +185,7 @@ func (l *logger) Debug(msg string, ctx ...interface{}) {
 	if atomic.LoadInt32(&LLevel) < LvlDebug{
 		return
 	}
-	l.SetPrefix("debug")
+	l.SetPrefix("debug	")
 	l.Output(2, fmt.Sprintln(msg,ctx) )
 }
 
@@ -189,7 +193,7 @@ func (l *logger) Info(msg string, ctx ...interface{}) {
 	if atomic.LoadInt32(&LLevel) < LvlInfo{
 		return
 	}
-	l.SetPrefix("info")
+	l.SetPrefix("info	")
 	l.Output(2, fmt.Sprintln(msg,ctx) )
 }
 
@@ -197,7 +201,7 @@ func (l *logger) Warn(msg string, ctx ...interface{}) {
 	if atomic.LoadInt32(&LLevel) < LvlWarn{
 		return
 	}
-	l.SetPrefix("warn")
+	l.SetPrefix("warn	")
 	l.Output(2, fmt.Sprintln(msg,ctx) )
 }
 
@@ -205,7 +209,7 @@ func (l *logger) Error(msg string, ctx ...interface{}) {
 	if atomic.LoadInt32(&LLevel) < LvlError{
 		return
 	}
-	l.SetPrefix("error")
+	l.SetPrefix("error	")
 	l.Output(2, fmt.Sprintln(msg,ctx) )
 }
 
@@ -213,13 +217,13 @@ func (l *logger) Crit(msg string, ctx ...interface{}) {
 	if atomic.LoadInt32(&LLevel) < LvlCrit{
 		return
 	}
-	l.SetPrefix("crit")
+	l.SetPrefix("crit	")
 	l.Output(2, fmt.Sprintln(msg,ctx) )
 	os.Exit(1)
 }
 
 func (l *logger) SetLevel(level int32)  {
-	if level < LvlError || level < LvlTrace {
+	if level < LvlError || level > LvlTrace {
 		return
 	}
 	atomic.StoreInt32(&LLevel , level)
@@ -329,4 +333,3 @@ func SetLevel(level int32)  {
 func Output(calldepth int, s string) error {
 	return std.Output(calldepth+1, s) // +1 for this frame.
 }
-
