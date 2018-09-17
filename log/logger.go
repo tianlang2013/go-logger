@@ -30,9 +30,30 @@ const (
 )
 
 
+// A Logger writes key/value pairs to a Handler
+type Logger interface {
+	// New returns a new Logger that has this logger's context plus the given context
+	New(out io.Writer, prefix string, flag int) *logger
+
+	SetOutput(w io.Writer)
+	SetLevel (i int32)
+	Flags()int
+	SetFlags(i int32)
+	Prefix() string
+	SetPrefix( s string)
+
+	// Log a message at the given level with context key/value pairs
+	Trace(msg string, ctx ...interface{})
+	Debug(msg string, ctx ...interface{})
+	Info(msg string, ctx ...interface{})
+	Warn(msg string, ctx ...interface{})
+	Error(msg string, ctx ...interface{})
+	Crit(msg string, ctx ...interface{})
+}
+
 var LLevel int32	= LvlInfo
 
-type Logger struct {
+type logger struct {
 	mu     sync.Mutex // ensures atomic writes; protects the following fields
 	prefix string     // prefix to write at beginning of each line
 	flag   int        // properties
@@ -40,12 +61,12 @@ type Logger struct {
 	buf    []byte     // for accumulating text to write
 }
 
-func New(out io.Writer, prefix string, flag int) *Logger {
-	return &Logger{out: out, prefix: prefix , flag: flag}
+func New(out io.Writer, prefix string, flag int) *logger {
+	return &logger{out: out, prefix: prefix , flag: flag}
 }
 
 
-func (l *Logger) SetOutput(w io.Writer) {
+func (l *logger) SetOutput(w io.Writer) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.out = w
@@ -71,7 +92,7 @@ func itoa(buf *[]byte, i int, wid int) {
 }
 
 
-func (l *Logger) formatHeader(buf *[]byte, t time.Time, file string, line int) {
+func (l *logger) formatHeader(buf *[]byte, t time.Time, file string, line int) {
 	*buf = append(*buf, l.prefix...)
 	if l.flag&(Ldate|Ltime|Lmicroseconds) != 0 {
 		if l.flag&LUTC != 0 {
@@ -119,7 +140,7 @@ func (l *Logger) formatHeader(buf *[]byte, t time.Time, file string, line int) {
 }
 
 
-func (l *Logger) Output(calldepth int, s string) error {
+func (l *logger) Output(calldepth int, s string) error {
 	now := time.Now() // get this early.
 	var file string
 	var line int
@@ -148,7 +169,7 @@ func (l *Logger) Output(calldepth int, s string) error {
 
 
 
-func (l *Logger) Trace(msg string, ctx ...interface{}) {
+func (l *logger) Trace(msg string, ctx ...interface{}) {
 	if atomic.LoadInt32(&LLevel) < LvlTrace{
 		return
 	}
@@ -156,7 +177,7 @@ func (l *Logger) Trace(msg string, ctx ...interface{}) {
 	l.Output(2, fmt.Sprintln(msg,ctx) )
 }
 
-func (l *Logger) Debug(msg string, ctx ...interface{}) {
+func (l *logger) Debug(msg string, ctx ...interface{}) {
 	if atomic.LoadInt32(&LLevel) < LvlDebug{
 		return
 	}
@@ -164,7 +185,7 @@ func (l *Logger) Debug(msg string, ctx ...interface{}) {
 	l.Output(2, fmt.Sprintln(msg,ctx) )
 }
 
-func (l *Logger) Info(msg string, ctx ...interface{}) {
+func (l *logger) Info(msg string, ctx ...interface{}) {
 	if atomic.LoadInt32(&LLevel) < LvlInfo{
 		return
 	}
@@ -172,7 +193,7 @@ func (l *Logger) Info(msg string, ctx ...interface{}) {
 	l.Output(2, fmt.Sprintln(msg,ctx) )
 }
 
-func (l *Logger) Warn(msg string, ctx ...interface{}) {
+func (l *logger) Warn(msg string, ctx ...interface{}) {
 	if atomic.LoadInt32(&LLevel) < LvlWarn{
 		return
 	}
@@ -180,7 +201,7 @@ func (l *Logger) Warn(msg string, ctx ...interface{}) {
 	l.Output(2, fmt.Sprintln(msg,ctx) )
 }
 
-func (l *Logger) Error(msg string, ctx ...interface{}) {
+func (l *logger) Error(msg string, ctx ...interface{}) {
 	if atomic.LoadInt32(&LLevel) < LvlError{
 		return
 	}
@@ -188,7 +209,7 @@ func (l *Logger) Error(msg string, ctx ...interface{}) {
 	l.Output(2, fmt.Sprintln(msg,ctx) )
 }
 
-func (l *Logger) Crit(msg string, ctx ...interface{}) {
+func (l *logger) Crit(msg string, ctx ...interface{}) {
 	if atomic.LoadInt32(&LLevel) < LvlCrit{
 		return
 	}
@@ -197,7 +218,7 @@ func (l *Logger) Crit(msg string, ctx ...interface{}) {
 	os.Exit(1)
 }
 
-func (l *Logger) SetLevel(level int32)  {
+func (l *logger) SetLevel(level int32)  {
 	if level < LvlError || level < LvlTrace {
 		return
 	}
@@ -205,35 +226,35 @@ func (l *Logger) SetLevel(level int32)  {
 }
 
 // Panicln is equivalent to l.Println() followed by a call to panic().
-func (l *Logger) Panicln(v ...interface{}) {
+func (l *logger) Panicln(v ...interface{}) {
 	s := fmt.Sprintln(v...)
 	l.Output(2, s)
 	panic(s)
 }
 
 // Flags returns the output flags for the logger.
-func (l *Logger) Flags() int {
+func (l *logger) Flags() int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.flag
 }
 
 // SetFlags sets the output flags for the logger.
-func (l *Logger) SetFlags(flag int) {
+func (l *logger) SetFlags(flag int) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.flag = flag
 }
 
 // Prefix returns the output prefix for the logger.
-func (l *Logger) Prefix() string {
+func (l *logger) Prefix() string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.prefix
 }
 
 // SetPrefix sets the output prefix for the logger.
-func (l *Logger) SetPrefix(prefix string) {
+func (l *logger) SetPrefix(prefix string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.prefix = prefix
@@ -308,3 +329,4 @@ func SetLevel(level int32)  {
 func Output(calldepth int, s string) error {
 	return std.Output(calldepth+1, s) // +1 for this frame.
 }
+
