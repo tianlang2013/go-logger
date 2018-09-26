@@ -12,13 +12,13 @@ import (
 )
 
 const (
-	Ldate         = 1 << iota     // the date in the local time zone: 2009/01/23
-	Ltime                         // the time in the local time zone: 01:23:23
-	Lmicroseconds                 // microsecond resolution: 01:23:23.123123.  assumes Ltime.
-	Llongfile                     // full file name and line number: /a/b/c/d.go:23
-	Lshortfile                    // final file name element and line number: d.go:23. overrides Llongfile
-	LUTC                          // if Ldate or Ltime is set, use UTC rather than the local time zone
-	LstdFlags     = Ldate | Ltime // initial values for the standard logger
+	Ldate         = 1 << iota     // 日期格式: 2009/01/23
+	Ltime                         // 时间格式 e: 01:23:23
+	Lmicroseconds                 // 显示毫秒: 01:23:23.123123.  assumes Ltime.
+	Llongfile                     // 显示完整文件路径: /a/b/c/d.go:23
+	Lshortfile                    // 显示文件名: d.go:23. overrides Llongfile
+	LUTC                          // 以UTC格式输出
+	LstdFlags     = Ldate | Ltime // initial values for the standard Log
 )
 const (
 	LvlCrit int32= iota
@@ -30,50 +30,29 @@ const (
 )
 
 
-// A Logger writes key/value pairs to a Handler
-type Logger interface {
-	// New returns a new Logger that has this logger's context plus the given context
-	New(out io.Writer, prefix string, flag int) *logger
+var LLevel int32	= LvlDebug
 
-	SetOutput(w io.Writer)
-	SetLevel (i int32)
-	Flags()int
-	SetFlags(i int32)
-	Prefix() string
-	SetPrefix( s string)
-
-	// Log a message at the given level with context key/value pairs
-	Trace(msg string, ctx ...interface{})
-	Debug(msg string, ctx ...interface{})
-	Info(msg string, ctx ...interface{})
-	Warn(msg string, ctx ...interface{})
-	Error(msg string, ctx ...interface{})
-	Crit(msg string, ctx ...interface{})
+type Log struct {
+	mu     sync.Mutex 	//  同步锁
+	model  string		// 模块，默认为BASE
+	prefix string     	// 日志分类，debug info warn trace crit error
+	flag   int        	// 属性
+	out    io.Writer  	// 输出器
+	buf    []byte     	// 内容缓存
 }
 
-var LLevel int32	= LvlInfo
-
-type logger struct {
-	mu     sync.Mutex // ensures atomic writes; protects the following fields
-	model  string		// defause is base
-	prefix string     // prefix to write at beginning of each line
-	flag   int        // properties
-	out    io.Writer  // destination for output
-	buf    []byte     // for accumulating text to write
-}
-
-func New(out io.Writer,   flag int , model string ) *logger {
-	return &logger{out: out,  flag: flag , model : model }
+func New(  model string ) *Log {
+	return &Log{out: os.Stderr,  flag: Lshortfile|log.LstdFlags , model : fmt.Sprintf("%s\t" ,model ) }
 }
 
 
-func (l *logger) SetOutput(w io.Writer) {
+func (l *Log) SetOutput(w io.Writer) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.out = w
 }
 
-var std = New(os.Stderr,   LstdFlags | log.Lshortfile,   "base	")
+var std = New( "base")
 
 
 func itoa(buf *[]byte, i int, wid int) {
@@ -92,10 +71,9 @@ func itoa(buf *[]byte, i int, wid int) {
 	*buf = append(*buf, b[bp:]...)
 }
 
+//格式化标准头信息
+func (l *Log) formatHeader(buf *[]byte, t time.Time, file string, line int) {
 
-func (l *logger) formatHeader(buf *[]byte, t time.Time, file string, line int) {
-
-	*buf = append(*buf, l.model...)
 	*buf = append(*buf, l.prefix...)
 	if l.flag&(Ldate|Ltime|Lmicroseconds) != 0 {
 		if l.flag&LUTC != 0 {
@@ -124,6 +102,7 @@ func (l *logger) formatHeader(buf *[]byte, t time.Time, file string, line int) {
 			*buf = append(*buf, ' ')
 		}
 	}
+	*buf = append(*buf, l.model...)
 	if l.flag&(Lshortfile|Llongfile) != 0 {
 		if l.flag&Lshortfile != 0 {
 			short := file
@@ -142,8 +121,8 @@ func (l *logger) formatHeader(buf *[]byte, t time.Time, file string, line int) {
 	}
 }
 
-
-func (l *logger) Output(calldepth int, s string) error {
+//格式化输出
+func (l *Log) Output(calldepth int, s string) error {
 	now := time.Now() // get this early.
 	var file string
 	var line int
@@ -172,7 +151,7 @@ func (l *logger) Output(calldepth int, s string) error {
 
 
 
-func (l *logger) Trace(msg string, ctx ...interface{}) {
+func (l *Log) Trace(msg string, ctx ...interface{}) {
 	if atomic.LoadInt32(&LLevel) < LvlTrace{
 		return
 	}
@@ -180,7 +159,7 @@ func (l *logger) Trace(msg string, ctx ...interface{}) {
 	l.Output(2, fmt.Sprintln(msg,ctx) )
 }
 
-func (l *logger) Debug(msg string, ctx ...interface{}) {
+func (l *Log) Debug(msg string, ctx ...interface{}) {
 	if atomic.LoadInt32(&LLevel) < LvlDebug{
 		return
 	}
@@ -188,7 +167,7 @@ func (l *logger) Debug(msg string, ctx ...interface{}) {
 	l.Output(2, fmt.Sprintln(msg,ctx) )
 }
 
-func (l *logger) Info(msg string, ctx ...interface{}) {
+func (l *Log) Info(msg string, ctx ...interface{}) {
 	if atomic.LoadInt32(&LLevel) < LvlInfo{
 		return
 	}
@@ -196,7 +175,7 @@ func (l *logger) Info(msg string, ctx ...interface{}) {
 	l.Output(2, fmt.Sprintln(msg,ctx) )
 }
 
-func (l *logger) Warn(msg string, ctx ...interface{}) {
+func (l *Log) Warn(msg string, ctx ...interface{}) {
 	if atomic.LoadInt32(&LLevel) < LvlWarn{
 		return
 	}
@@ -204,7 +183,7 @@ func (l *logger) Warn(msg string, ctx ...interface{}) {
 	l.Output(2, fmt.Sprintln(msg,ctx) )
 }
 
-func (l *logger) Error(msg string, ctx ...interface{}) {
+func (l *Log) Error(msg string, ctx ...interface{}) {
 	if atomic.LoadInt32(&LLevel) < LvlError{
 		return
 	}
@@ -212,7 +191,7 @@ func (l *logger) Error(msg string, ctx ...interface{}) {
 	l.Output(2, fmt.Sprintln(msg,ctx) )
 }
 
-func (l *logger) Crit(msg string, ctx ...interface{}) {
+func (l *Log) Crit(msg string, ctx ...interface{}) {
 	if atomic.LoadInt32(&LLevel) < LvlCrit{
 		return
 	}
@@ -221,49 +200,103 @@ func (l *logger) Crit(msg string, ctx ...interface{}) {
 	os.Exit(1)
 }
 
-func (l *logger) SetLevel(level int32)  {
+/**
+	增加格式化支持
+ */
+
+func (l *Log) TraceF(format string, ctx ...interface{}) {
+	if atomic.LoadInt32(&LLevel) < LvlTrace{
+		return
+	}
+	l.SetPrefix("trace	")
+	l.Output(2, fmt.Sprintf(format,ctx) )
+}
+
+func (l *Log) DebugF(format string, ctx ...interface{}) {
+	if atomic.LoadInt32(&LLevel) < LvlDebug{
+		return
+	}
+	l.SetPrefix("debug	")
+	l.Output(2, fmt.Sprintf(format,ctx) )
+}
+
+func (l *Log) InfoF(format string, ctx ...interface{}) {
+	if atomic.LoadInt32(&LLevel) < LvlInfo{
+		return
+	}
+	l.SetPrefix("info	")
+	l.Output(2, fmt.Sprintf(format,ctx) )
+}
+
+func (l *Log) WarnF(format string, ctx ...interface{}) {
+	if atomic.LoadInt32(&LLevel) < LvlWarn{
+		return
+	}
+	l.SetPrefix("warn	")
+	l.Output(2, fmt.Sprintf(format,ctx) )
+}
+
+func (l *Log) ErrorF(format string, ctx ...interface{}) {
+	if atomic.LoadInt32(&LLevel) < LvlError{
+		return
+	}
+	l.Output(2, fmt.Sprintf(format,ctx) )
+}
+
+func (l *Log) CritF(format string, ctx ...interface{}) {
+	if atomic.LoadInt32(&LLevel) < LvlCrit{
+		return
+	}
+	l.SetPrefix("crit	")
+	l.Output(2, fmt.Sprintf(format,ctx) )
+	os.Exit(1)
+}
+
+
+
+func (l *Log) SetLevel(level int32)  {
 	if level < LvlError || level > LvlTrace {
 		return
 	}
 	atomic.StoreInt32(&LLevel , level)
 }
 
-// Panicln is equivalent to l.Println() followed by a call to panic().
-func (l *logger) Panicln(v ...interface{}) {
+// 与crit类似
+func (l *Log) Panicln(v ...interface{}) {
 	s := fmt.Sprintln(v...)
 	l.Output(2, s)
 	panic(s)
 }
 
-// Flags returns the output flags for the logger.
-func (l *logger) Flags() int {
+// 返回当前的输出属性
+func (l *Log) Flags() int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.flag
 }
 
-// SetFlags sets the output flags for the logger.
-func (l *logger) SetFlags(flag int) {
+//
+func (l *Log) SetFlags(flag int) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.flag = flag
 }
 
-// Prefix returns the output prefix for the logger.
-func (l *logger) Prefix() string {
+// 返回日志的输出类型，每个类型是固定的，目前没有太太意义
+func (l *Log) Prefix() string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.prefix
 }
 
-// SetPrefix sets the output prefix for the logger.
-func (l *logger) SetPrefix(prefix string) {
+// 配置日志输出的类型
+func (l *Log) SetPrefix(prefix string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.prefix = prefix
 }
 
-// SetOutput sets the output destination for the standard logger.
+// 配置输出接口
 func SetOutput(w io.Writer) {
 	std.mu.Lock()
 	defer std.mu.Unlock()
@@ -271,7 +304,7 @@ func SetOutput(w io.Writer) {
 }
 
 
-// SetFlags sets the output flags for the standard logger.
+// 配置属性，用来控制 日期、时间、文件名等输出
 func SetFlags(flag int) {
 	std.SetFlags(flag)
 }
@@ -317,6 +350,7 @@ func  Error(msg string, ctx ...interface{}) {
 	std.Output(2, fmt.Sprintln(msg,ctx) )
 }
 
+//输出信息并终止整个系统运行
 func  Crit(msg string, ctx ...interface{}) {
 	if atomic.LoadInt32(&LLevel) < LvlCrit{
 		return
@@ -326,9 +360,41 @@ func  Crit(msg string, ctx ...interface{}) {
 	os.Exit(1)
 }
 
+/**
+	增加默认格式化加支持
+ */
+
+func TraceF(format string , v ...interface{})  {
+	Trace( fmt.Sprintf(format , v))
+}
+
+func DebugF(format string , v ...interface{})  {
+	Debug( fmt.Sprintf(format , v))
+}
+
+func InfoF(format string , v ...interface{})  {
+	Info( fmt.Sprintf(format , v))
+}
+
+func ErrorF(format string , v ...interface{})  {
+	Error( fmt.Sprintf(format , v))
+}
+
+func WarnF(format string , v ...interface{})  {
+	Warn( fmt.Sprintf(format , v))
+}
+
+func CritF(format string , v ...interface{})  {
+	Crit( fmt.Sprintf(format , v))
+}
+
+//设置日志级别
 func SetLevel(level int32)  {
 	std.SetLevel(level)
 }
+
+//单独封装输出接口
 func Output(calldepth int, s string) error {
 	return std.Output(calldepth+1, s) // +1 for this frame.
 }
+
